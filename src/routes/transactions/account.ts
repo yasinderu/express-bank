@@ -1,5 +1,9 @@
 import express from "express";
-import { TransactionModel } from "../../models/account.model";
+import {
+  Account,
+  NewAccount,
+  TransactionModel,
+} from "../../models/account.model";
 import { authorize } from "../auth/auth.middleware";
 import { pool } from "../../db/pool";
 import { Record, RecordModel } from "../../models/record.model";
@@ -17,13 +21,24 @@ router.get("/account/balance/:accountNumber", async (req, res) => {
   }
 });
 
+router.get("/account", async (req, res) => {
+  try {
+    const { id: userId } = req.user;
+
+    const account = await TransactionModel.findByUserId(userId);
+    res.status(200).send(account);
+  } catch (error) {
+    res.status(500).send({ message: error });
+  }
+});
+
 router.post("/account/create", async (req, res) => {
   try {
     const { id: userId } = req.user;
     const accountNumber = String(
       Math.floor(100000000 + Math.random() * 900000000)
     );
-    const details = {
+    const details: NewAccount = {
       balance: req.body.balance,
       accountNumber,
       userId,
@@ -41,11 +56,11 @@ router.post("/account/send", authorize, async (req, res) => {
   try {
     const { balance, accountNumber, recieverAccountNumber } = req.body;
     const { id } = req.user;
-    const senderDetails = {
+    const senderDetails: Account = {
       balance,
       accountNumber: accountNumber,
     };
-    const recieverDetails = {
+    const recieverDetails: Account = {
       balance,
       accountNumber: recieverAccountNumber,
     };
@@ -112,6 +127,37 @@ router.post("/account/withdraw", authorize, async (req, res) => {
 
     await pool.query("COMMIT");
     res.status(200).send(updatedAccount);
+  } catch (error) {
+    await pool.query("ROLLBACK");
+    res.status(500).send({ message: error });
+  }
+});
+
+router.post("/account/deposit", authorize, async (req, res) => {
+  try {
+    const { accountNumber, balance } = req.body;
+    const details: Account = {
+      balance: balance,
+      accountNumber: accountNumber,
+    };
+
+    await pool.query("BEGIN");
+
+    const account = await TransactionModel.addBalance(details);
+
+    const record: Record = {
+      userId: account.user_id,
+      accountId: account.id,
+      senderAccNum: null,
+      receiverAccNum: null,
+      trxType: "in",
+      amount: balance,
+    };
+    await RecordModel.create(record);
+
+    await pool.query("COMMIT");
+
+    res.status(200).send(account);
   } catch (error) {
     await pool.query("ROLLBACK");
     res.status(500).send({ message: error });

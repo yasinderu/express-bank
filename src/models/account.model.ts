@@ -1,12 +1,12 @@
 import { pool } from "../db/pool";
 
-interface Account {
+export interface Account {
   id?: string;
   balance: string;
   accountNumber: string;
 }
 
-interface NewAccount extends Account {
+export interface NewAccount extends Account {
   userId: string;
 }
 
@@ -40,7 +40,7 @@ class TransactionModel {
       [userId]
     );
 
-    return rows[0];
+    return rows;
   }
 
   static async create(newAccount: NewAccount) {
